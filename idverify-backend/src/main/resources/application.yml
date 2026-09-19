@@ -7,16 +7,19 @@ spring:
   application:
     name: idverify-backend
   datasource:
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER:org.h2.Driver}
     url: ${SPRING_DATASOURCE_URL:jdbc:h2:file:./data/idverify_db;MODE=MySQL;DB_CLOSE_DELAY=-1}
     username: ${SPRING_DATASOURCE_USERNAME:sa}
     password: ${SPRING_DATASOURCE_PASSWORD:}
   jpa:
+    database-platform: ${SPRING_JPA_DATABASE_PLATFORM:org.hibernate.dialect.H2Dialect}
     hibernate:
       ddl-auto: update
     defer-datasource-initialization: true
     show-sql: false
     properties:
       hibernate:
+        dialect: ${HIBERNATE_DIALECT:org.hibernate.dialect.H2Dialect}
         format_sql: true
   sql:
     init:
