@@ -1,0 +1,196 @@
+/* IDVerify Global Design System Styles */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+/* ============================================================
+   CSS Custom Properties (Design Tokens)
+   ============================================================ */
+:root {
+  --color-navy-900: #0F1A33;
+  --color-navy-800: #1B2A4A;
+  --color-navy-700: #243555;
+  --color-accent-blue: #2E6BE6;
+  --color-accent-blue-hover: #2558c9;
+  --color-surface: #F4F6FA;
+  --color-white: #FFFFFF;
+  --color-risk-high: #EF4444;
+  --color-risk-medium: #F59E0B;
+  --color-risk-low: #10B981;
+  --color-border: #E5E7EB;
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-blue: 0 4px 14px 0 rgb(46 107 230 / 0.25);
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+}
+
+/* ============================================================
+   Reset & Base
+   ============================================================ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: #111827;
+  background-color: var(--color-surface);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ============================================================
+   Custom Scrollbar (thin, dark for sidebar)
+   ============================================================ */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 100vmax;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Dark surface (sidebar) scrollbar */
+.dark-scrollbar::-webkit-scrollbar-thumb {
+  background: #2d3d5c;
+}
+
+.dark-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #3d4f70;
+}
+
+/* ============================================================
+   Loading & Skeleton Animations
+   ============================================================ */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+@keyframes pulse-fade {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@keyframes slide-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin-slow {
+  to { transform: rotate(360deg); }
+}
+
+.loading-skeleton {
+  background: linear-gradient(
+    90deg,
+    #f0f2f6 25%,
+    #e4e8f0 50%,
+    #f0f2f6 75%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+.animate-slide-in {
+  animation: slide-in-up 0.3s ease forwards;
+}
+
+/* ============================================================
+   Google Spinner Animation
+   ============================================================ */
+.google-spinner {
+  animation: google-rotate 1.6s linear infinite;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.google-spinner-circle {
+  stroke-linecap: round;
+  animation:
+    google-dash 1.5s ease-in-out infinite,
+    google-colors 6s ease-in-out infinite;
+}
+
+@keyframes google-rotate {
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes google-dash {
+  0%   { stroke-dasharray: 1, 150;  stroke-dashoffset: 0; }
+  50%  { stroke-dasharray: 90, 150; stroke-dashoffset: -35; }
+  100% { stroke-dasharray: 90, 150; stroke-dashoffset: -124; }
+}
+
+@keyframes google-colors {
+  0%, 100% { stroke: #4285F4; }  /* Google blue   */
+  25%      { stroke: #EA4335; }  /* Google red    */
+  50%      { stroke: #FBBC05; }  /* Google yellow */
+  75%      { stroke: #34A853; }  /* Google green  */
+}
+
+/* ============================================================
+   Typography Utilities
+   ============================================================ */
+.font-mono {
+  font-family: var(--font-mono) !important;
+}
+
+/* ============================================================
+   Focus Ring (Accessibility)
+   ============================================================ */
+:focus-visible {
+  outline: 2px solid var(--color-accent-blue);
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   Selection Color
+   ============================================================ */
+::selection {
+  background: rgb(46 107 230 / 0.2);
+  color: #1e3a6f;
+}
+
+/* ============================================================
+   Print Styles (for report export)
+   ============================================================ */
+@media print {
+  aside, footer, button, nav {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+  }
+  body {
+    background: white !important;
+    font-size: 11pt;
+  }
+}

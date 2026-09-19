@@ -1,0 +1,22 @@
+fastapi>=0.110,<1
+uvicorn[standard]>=0.28,<1
+python-multipart>=0.0.9,<1
+opencv-python-headless>=4.9,<5
+pillow>=10.4,<12
+numpy>=2.1,<2.4
+pytesseract>=0.3.10,<0.4
+piexif>=1.1.3,<2
+pydantic>=2.6,<3
+requests>=2.31,<3
+mrz>=0.5.2,<1
+scipy>=1.11,<2
+mediapipe==0.10.33
+onnxruntime>=1.17,<2
+
+# Primary OCR: PaddleOCR 3.x + PaddlePaddle CPU.
+# On Windows, PaddlePaddle currently provides official CPU wheels for Python 3.9-3.13.
+paddlepaddle==3.3.0
+paddleocr>=3.3,<4
+
+# Face verification: ArcFace through DeepFace.
+deepface==0.0.100

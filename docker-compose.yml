@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: idverify-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rakesh@2006
+      MYSQL_DATABASE: idverify_db
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    restart: always
+
+  ai-service:
+    build: ./idverify-ai-service
+    container_name: idverify-ai-service
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+    restart: always
+
+  backend:
+    build: ./idverify-backend
+    container_name: idverify-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/idverify_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=rakesh@2006
+      - AI_SERVICE_URL=http://ai-service:8000
+    depends_on:
+      - mysql
+      - ai-service
+    restart: always
+
+  frontend:
+    build: ./idverify-frontend
+    container_name: idverify-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: always
+
+volumes:
+  mysql_data:
