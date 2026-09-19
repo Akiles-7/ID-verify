@@ -21,12 +21,35 @@ def convert_pdf_to_images(pdf_bytes: bytes, max_pages: int = 2) -> List[np.ndarr
         pass
     return images
 
-def decode_image_bytes_to_bgr(data_bytes: bytes) -> Optional[np.ndarray]:
-    """Decodes image bytes to OpenCV BGR numpy array using cv2 then PIL fallback."""
+def decode_image_bytes_to_bgr(data_bytes: Any) -> Optional[np.ndarray]:
+    """Decodes image bytes, base64 data strings, or raw buffers to OpenCV BGR numpy array using cv2 then PIL fallback."""
     if not data_bytes:
         return None
+    import base64
+    raw_bytes = data_bytes
+    if isinstance(data_bytes, str):
+        if "," in data_bytes:
+            data_bytes = data_bytes.split(",", 1)[1]
+        try:
+            raw_bytes = base64.b64decode(data_bytes)
+        except Exception:
+            raw_bytes = data_bytes.encode("utf-8", errors="ignore")
+    elif isinstance(data_bytes, bytes):
+        if data_bytes.startswith(b"data:image") or data_bytes.startswith(b"data:application"):
+            comma_idx = data_bytes.find(b",")
+            if comma_idx != -1:
+                try:
+                    raw_bytes = base64.b64decode(data_bytes[comma_idx+1:])
+                except Exception:
+                    pass
+        elif data_bytes.startswith(b"/9j/") or data_bytes.startswith(b"iVBORw0KGgo") or data_bytes.startswith(b"AAAA"):
+            try:
+                raw_bytes = base64.b64decode(data_bytes)
+            except Exception:
+                pass
+
     try:
-        nparr = np.frombuffer(data_bytes, np.uint8)
+        nparr = np.frombuffer(raw_bytes, np.uint8)
         image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if image is not None and image.size > 0:
             return image
@@ -35,7 +58,7 @@ def decode_image_bytes_to_bgr(data_bytes: bytes) -> Optional[np.ndarray]:
     try:
         from PIL import Image, ImageOps
         import io
-        pil_img = Image.open(io.BytesIO(data_bytes))
+        pil_img = Image.open(io.BytesIO(raw_bytes))
         pil_img = ImageOps.exif_transpose(pil_img)
         pil_img = pil_img.convert("RGB")
         image = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
@@ -43,6 +66,18 @@ def decode_image_bytes_to_bgr(data_bytes: bytes) -> Optional[np.ndarray]:
             return image
     except Exception:
         pass
+
+    # Extra fallback: try base64 decode in case raw_bytes was still base64 encoded
+    if isinstance(raw_bytes, bytes) and not raw_bytes.startswith(b"\xff\xd8\xff") and not raw_bytes.startswith(b"\x89PNG"):
+        try:
+            b64_attempt = base64.b64decode(raw_bytes)
+            nparr = np.frombuffer(b64_attempt, np.uint8)
+            image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if image is not None and image.size > 0:
+                return image
+        except Exception:
+            pass
+
     return None
 
 def decode_image_or_pdf(data_bytes: bytes) -> List[np.ndarray]:

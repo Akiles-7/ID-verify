@@ -12,7 +12,22 @@ export default function StepByStepScan({ scanData, caseId, docPreviewUrl, livePr
   const [currentStep, setCurrentStep] = useState(1);
   const [showFullPage, setShowFullPage] = useState(false);
   const [highlightedField, setHighlightedField] = useState(null);
+  const [localScanData, setLocalScanData] = useState(scanData);
 
+  useEffect(() => {
+    setLocalScanData(scanData);
+  }, [scanData]);
+
+  const handleVerificationUpdated = (updateData) => {
+    setLocalScanData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        face: updateData.face || prev.face,
+        liveness: updateData.liveness || prev.liveness,
+      };
+    });
+  };
 
   const steps = [
     { num: 1, title: 'Module 1: OCR Extraction', desc: 'Identity fields & ICAO 9303 MRZ parsing' },
@@ -77,14 +92,16 @@ export default function StepByStepScan({ scanData, caseId, docPreviewUrl, livePr
           <ValidationChecklist data={scanData?.validation} />
           <TamperHeatmap data={scanData?.tampering || scanData?.tamper} />
           <FaceCompareCard
-            data={scanData?.face}
-            livenessData={scanData?.liveness}
-            docImageUrl={scanData?.face?.doc_face_b64 || scanData?.ocr?.doc_face_b64 || scanData?.ocr?.face_crop_b64 || docPreviewUrl}
-            liveImageUrl={scanData?.face?.live_face_b64 || livePreviewUrl}
+            data={localScanData?.face}
+            livenessData={localScanData?.liveness}
+            docImageUrl={localScanData?.face?.doc_face_b64 || localScanData?.ocr?.doc_face_b64 || localScanData?.ocr?.face_crop_b64 || docPreviewUrl}
+            liveImageUrl={localScanData?.face?.live_face_b64 || livePreviewUrl}
+            caseId={resolvedCaseId}
+            onVerificationUpdated={handleVerificationUpdated}
           />
         </div>
 
-        <RiskAssessmentPanel data={scanData?.risk} caseId={resolvedCaseId} onActionComplete={onActionComplete} fullScanData={scanData} />
+        <RiskAssessmentPanel data={localScanData?.risk} caseId={resolvedCaseId} onActionComplete={onActionComplete} fullScanData={localScanData} />
       </div>
     );
   }
@@ -148,14 +165,16 @@ export default function StepByStepScan({ scanData, caseId, docPreviewUrl, livePr
         {currentStep === 3 && <TamperHeatmap data={scanData?.tampering || scanData?.tamper} />}
         {currentStep === 4 && (
           <FaceCompareCard
-            data={scanData?.face}
-            livenessData={scanData?.liveness}
-            docImageUrl={scanData?.face?.doc_face_b64 || scanData?.ocr?.doc_face_b64 || scanData?.ocr?.face_crop_b64 || docPreviewUrl}
-            liveImageUrl={scanData?.face?.live_face_b64 || livePreviewUrl}
+            data={localScanData?.face}
+            livenessData={localScanData?.liveness}
+            docImageUrl={localScanData?.face?.doc_face_b64 || localScanData?.ocr?.doc_face_b64 || localScanData?.ocr?.face_crop_b64 || docPreviewUrl}
+            liveImageUrl={localScanData?.face?.live_face_b64 || livePreviewUrl}
+            caseId={resolvedCaseId}
+            onVerificationUpdated={handleVerificationUpdated}
           />
         )}
         {currentStep === 5 && (
-          <RiskAssessmentPanel data={scanData?.risk} caseId={resolvedCaseId} onActionComplete={onActionComplete} fullScanData={scanData} />
+          <RiskAssessmentPanel data={localScanData?.risk} caseId={resolvedCaseId} onActionComplete={onActionComplete} fullScanData={localScanData} />
         )}
       </div>
 

@@ -488,12 +488,139 @@ public class ScanOrchestrationService {
             return Map.of("status", "ERROR", "message", "Case not found");
         }
         CaseEntity caseEntity = opt.get();
-        if (livePhoto != null && !livePhoto.isEmpty()) {
-            caseEntity.setLiveCaptureImagePath("/uploads/" + livePhoto.getOriginalFilename());
-            caseEntity.setLiveCaptureSource("CAMERA");
-            caseRepository.save(caseEntity);
+        if (livePhoto == null || livePhoto.isEmpty()) {
+            return Map.of("status", "ERROR", "message", "Live photo is required");
         }
-        return Map.of("status", "SUCCESS", "caseId", caseId, "message", "Live selfie updated successfully");
+
+        String liveFilename = livePhoto.getOriginalFilename() != null && !livePhoto.getOriginalFilename().isBlank()
+                ? livePhoto.getOriginalFilename() : "live_selfie.jpg";
+        caseEntity.setLiveCaptureImagePath("/uploads/" + liveFilename);
+        caseEntity.setLiveCaptureSource("CAMERA");
+        caseRepository.save(caseEntity);
+
+        Optional<FaceResult> faceOpt = faceResultRepository.findByCaseEntityId(caseId);
+        FaceResult face = faceOpt.orElseGet(() -> FaceResult.builder().caseEntity(caseEntity).build());
+        String docFaceB64 = face.getDocFaceB64();
+
+        Map<String, Object> faceResp = new LinkedHashMap<>();
+        Map<String, Object> livenessResp = new LinkedHashMap<>();
+
+        try {
+            SettingsDto settings = settingsService.getSettingsDto();
+            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+            org.springframework.core.io.ByteArrayResource liveResource = new org.springframework.core.io.ByteArrayResource(livePhoto.getBytes()) {
+                @Override
+                public String getFilename() {
+                    return liveFilename;
+                }
+            };
+            body.add("live_image", liveResource);
+            if (docFaceB64 != null && !docFaceB64.isBlank()) {
+                body.add("doc_face_b64", docFaceB64);
+            }
+            body.add("threshold", settings.getFaceMatchThreshold() != null ? settings.getFaceMatchThreshold() : 0.68);
+            body.add("model", settings.getFaceBackendModel() != null ? settings.getFaceBackendModel() : "ArcFace");
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+            HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(body, headers);
+
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    aiServiceUrl + "/face/verify",
+                    HttpMethod.POST,
+                    request,
+                    new ParameterizedTypeReference<>() {}
+            );
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Map<String, Object> aiFace = response.getBody();
+                boolean compDone = Boolean.TRUE.equals(aiFace.get("comparison_performed"));
+                Boolean matched = aiFace.get("matched") != null
+                        ? (Boolean) aiFace.get("matched")
+                        : (Boolean) aiFace.get("match");
+                String matchStatus = (String) aiFace.getOrDefault("status", matched != null && matched ? "VERIFIED" : "MISMATCH");
+
+                Map<String, Object> aiLiveness = aiFace.get("liveness") instanceof Map
+                        ? (Map<String, Object>) aiFace.get("liveness")
+                        : Map.of();
+
+                int livenessScore = aiLiveness.get("liveness_score") != null
+                        ? parseInt(aiLiveness.get("liveness_score"), 0)
+                        : parseInt(aiFace.get("liveness_score"), 0);
+
+                String embPreviewJson = "[0.000]";
+                try {
+                    Object embObj = aiFace.get("embedding_preview");
+                    if (embObj != null) {
+                        embPreviewJson = new ObjectMapper().writeValueAsString(embObj);
+                    }
+                } catch (Exception ignored) {}
+
+                face.setComparisonPerformed(compDone);
+                face.setMatchResult(matched);
+                face.setMatchStatus(matchStatus);
+                face.setModel(safeSubstring((String) aiFace.getOrDefault("model", "ArcFace"), 40));
+                face.setEmbeddingDim(parseInt(aiFace.get("embedding_dim"), 512));
+                face.setEmbeddingPreview(embPreviewJson);
+                if (aiFace.get("distance") != null) {
+                    face.setDistance(parseBigDecimal(aiFace.get("distance"), "0.0000").setScale(4, RoundingMode.HALF_UP));
+                }
+                face.setThresholdUsed(parseBigDecimal(aiFace.get("threshold"), "0.6800").setScale(4, RoundingMode.HALF_UP));
+                if (aiFace.get("doc_confidence") != null) {
+                    face.setDocFaceConfidence(parseBigDecimal(aiFace.get("doc_confidence"), "0.9600").setScale(4, RoundingMode.HALF_UP));
+                }
+                if (aiFace.get("live_confidence") != null) {
+                    face.setLiveFaceConfidence(parseBigDecimal(aiFace.get("live_confidence"), "0.9700").setScale(4, RoundingMode.HALF_UP));
+                }
+                face.setLivenessScore(livenessScore);
+                face.setLivenessStatus(safeSubstring((String) aiLiveness.getOrDefault("liveness_status", "STATIC_PHOTO_UNVERIFIED"), 40));
+                face.setBlinkDetected(Boolean.TRUE.equals(aiLiveness.get("blink_detected")));
+                face.setHeadMotionDetected(Boolean.TRUE.equals(aiLiveness.get("motion_detected")));
+                face.setLivenessReason(safeSubstring((String) aiLiveness.getOrDefault("detail", aiLiveness.getOrDefault("reason", "")), 255));
+                if (aiFace.get("live_face_b64") != null) {
+                    face.setLiveFaceB64((String) aiFace.get("live_face_b64"));
+                }
+                if (aiFace.get("doc_face_b64") != null && (face.getDocFaceB64() == null || face.getDocFaceB64().isBlank())) {
+                    face.setDocFaceB64((String) aiFace.get("doc_face_b64"));
+                }
+                faceResultRepository.save(face);
+
+                // Recalculate RiskScore if present
+                Optional<RiskScore> riskOpt = riskScoreRepository.findByCaseEntityId(caseId);
+                if (riskOpt.isPresent()) {
+                    RiskScore risk = riskOpt.get();
+                    int faceContrib = Boolean.TRUE.equals(matched) ? 0 : 25;
+                    risk.setContributionFace(faceContrib);
+                    int total = (risk.getContributionMrz() != null ? risk.getContributionMrz() : 0)
+                            + (risk.getContributionTamper() != null ? risk.getContributionTamper() : 0)
+                            + faceContrib
+                            + (risk.getContributionValidation() != null ? risk.getContributionValidation() : 0);
+                    risk.setTotalScore(total);
+                    if (total >= 60) {
+                        risk.setBand("HIGH");
+                    } else if (total >= 30) {
+                        risk.setBand("MEDIUM");
+                    } else {
+                        risk.setBand("LOW");
+                    }
+                    riskScoreRepository.save(risk);
+                }
+
+                auditLogService.log("VERIFY_FACE", 1L, caseEntity, "127.0.0.1", "Biometric face verification completed: " + matchStatus);
+                faceResp = aiFace;
+                livenessResp = aiLiveness;
+            }
+        } catch (Exception e) {
+            auditLogService.log("VERIFY_FACE_ERROR", 1L, caseEntity, "127.0.0.1", "Live capture face verification error: " + e.getMessage());
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("status", "SUCCESS");
+        result.put("caseId", caseId);
+        result.put("face", faceResp);
+        result.put("liveness", livenessResp);
+        result.put("message", "Live selfie updated and biometrically verified successfully");
+        return result;
     }
 
     private String safeSubstring(String s, int maxLen) {

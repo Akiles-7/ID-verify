@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import os
 import base64
+from typing import Any, Optional, List, Tuple
 from PIL import Image
 import io
 
@@ -143,89 +144,144 @@ def trim_text_bleed(crop: np.ndarray) -> np.ndarray:
 
 
 def extract_headshot_from_document(doc_img: np.ndarray, logs: list = None) -> np.ndarray | None:
-    """Shared Face Extractor: Locates and crops printed headshot photo with DNN, Haar, candidate bounds & sanity validation."""
+    """Shared Face Extractor: Locates and crops printed headshot photo with DeepFace, multi-cascade Haar, and template heuristics."""
     if logs is None:
         logs = []
 
     if doc_img is None or doc_img.size == 0:
         return None
 
+    # Fast-path: If image is already a cropped face/selfie
+    if looks_like_a_face_region(doc_img) and min(doc_img.shape[:2]) <= 400:
+        return doc_img
+
     # Apply unsharp mask if document canvas is blurry
     doc_img = sharpen_if_blurry(doc_img, threshold=80.0, logs=logs)
-
     h, w = doc_img.shape[:2]
 
-    # 1. Primary: OpenCV Caffe SSD DNN Detector
-    dnn_res = detect_face_dnn(doc_img)
-    if dnn_res is not None:
-        x1, y1, x2, y2, conf = dnn_res
-        fw, fh = x2 - x1, y2 - y1
-        pad_x = int(fw * 0.20)
-        pad_y = int(fh * 0.20)
-        cy1 = max(0, y1 - pad_y)
-        cy2 = min(h, y2 + pad_y)
-        cx1 = max(0, x1 - pad_x)
-        cx2 = min(w, x2 + pad_x)
-        crop = doc_img[cy1:cy2, cx1:cx2]
-        crop = trim_text_bleed(crop)
-        if looks_like_a_face_region(crop):
-            logs.append({"type": "INFO", "text": f"Face Extractor: Detected face via DNN SSD ({cx2-cx1}×{cy2-cy1}px, conf: {conf:.2f})"})
-            return crop
-
-    # 2. Secondary: Haar Cascade detection
+    # 1. Primary: DeepFace detector (OpenCV backend with eye landmarks)
     try:
-        gray = cv2.cvtColor(doc_img, cv2.COLOR_BGR2GRAY)
-        cascade = get_face_cascade()
-        if cascade is not None:
-            faces = cascade.detectMultiScale(gray, scaleFactor=1.05, minNeighbors=3, minSize=(30, 30))
-            if len(faces) > 0:
-                faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
-                fx, fy, fw, fh = faces[0]
-                pad_x = int(fw * 0.25)
-                pad_y = int(fh * 0.25)
-                y1 = max(0, fy - pad_y)
-                y2 = min(h, fy + fh + pad_y)
-                x1 = max(0, fx - pad_x)
-                x2 = min(w, fx + fw + pad_x)
-                crop = doc_img[y1:y2, x1:x2]
-                crop = trim_text_bleed(crop)
-                if looks_like_a_face_region(crop):
-                    logs.append({"type": "INFO", "text": f"Face Extractor: Detected face via Haar Cascade ({x2-x1}×{y2-y1}px)"})
-                    return crop
-    except Exception as e:
-        logs.append({"type": "WARN", "text": f"Haar cascade detection skipped: {str(e)[:50]}"})
-
-    # 3. Positional Heuristic Candidates (tightened bounds, y2 <= 0.76*h to avoid barcode region)
-    candidates = [
-        (int(w * 0.02), int(h * 0.08), int(w * 0.45), int(h * 0.76)),  # Standard left-side photo (y2 <= 0.76*h)
-        (int(w * 0.55), int(h * 0.08), int(w * 0.98), int(h * 0.76)),  # Right-side photo
-        (int(w * 0.05), int(h * 0.05), int(w * 0.50), int(h * 0.60)),  # Top-left photo
-        (int(w * 0.02), int(h * 0.45), int(w * 0.50), int(h * 0.95)),  # Bottom-left photo (Aadhaar composite)
-        (int(w * 0.50), int(h * 0.45), int(w * 0.98), int(h * 0.95)),  # Bottom-right photo
-    ]
-
-    for x1, y1, x2, y2 in candidates:
-        if x2 > x1 + 30 and y2 > y1 + 30:
+        from deepface import DeepFace
+        df_faces = DeepFace.extract_faces(doc_img, detector_backend="opencv", enforce_detection=False)
+        valid_faces = []
+        for df_face in df_faces:
+            fa = df_face.get("facial_area", {})
+            fx, fy, fw, fh = fa.get("x", 0), fa.get("y", 0), fa.get("w", 0), fa.get("h", 0)
+            conf = float(df_face.get("confidence", 0.0))
+            if fw >= 25 and fh >= 25 and conf >= 0.35:
+                valid_faces.append((fx, fy, fw, fh, conf))
+        if valid_faces:
+            # Sort by area * confidence
+            valid_faces.sort(key=lambda item: item[2] * item[3] * item[4], reverse=True)
+            fx, fy, fw, fh, conf = valid_faces[0]
+            pad_x = int(fw * 0.22)
+            pad_y = int(fh * 0.28)
+            y1 = max(0, fy - pad_y)
+            y2 = min(h, fy + fh + pad_y)
+            x1 = max(0, fx - pad_x)
+            x2 = min(w, fx + fw + pad_x)
             crop = doc_img[y1:y2, x1:x2]
             crop = trim_text_bleed(crop)
             if looks_like_a_face_region(crop):
-                logs.append({"type": "INFO", "text": f"Face Extractor: Located valid profile photo using template bounds ({x2-x1}×{y2-y1}px)"})
+                logs.append({"type": "INFO", "text": f"Face Extractor: Located portrait photo ({x2-x1}×{y2-y1}px, conf={conf:.2f})"})
                 return crop
+    except Exception as e:
+        pass
 
-    logs.append({"type": "WARN", "text": "Face Extractor: No valid profile photo region located on document canvas"})
+    # 2. Secondary: Multi-cascade with CLAHE contrast enhancement
+    try:
+        gray = cv2.cvtColor(doc_img, cv2.COLOR_BGR2GRAY) if len(doc_img.shape) == 3 else doc_img
+        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+        enhanced_gray = clahe.apply(gray)
+
+        cascades = []
+        c1 = get_face_cascade()
+        if c1 is not None:
+            cascades.append(c1)
+        try:
+            if hasattr(cv2, 'data') and hasattr(cv2.data, 'haarcascades'):
+                alt_path = cv2.data.haarcascades + 'haarcascade_frontalface_alt2.xml'
+                c_alt = cv2.CascadeClassifier(alt_path)
+                if not c_alt.empty():
+                    cascades.append(c_alt)
+        except Exception:
+            pass
+
+        for cascade in cascades:
+            for target_gray in [enhanced_gray, gray]:
+                faces = cascade.detectMultiScale(target_gray, scaleFactor=1.05, minNeighbors=3, minSize=(30, 30))
+                if len(faces) > 0:
+                    faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
+                    fx, fy, fw, fh = faces[0]
+                    pad_x = int(fw * 0.25)
+                    pad_y = int(fh * 0.30)
+                    y1 = max(0, fy - pad_y)
+                    y2 = min(h, fy + fh + pad_y)
+                    x1 = max(0, fx - pad_x)
+                    x2 = min(w, fx + fw + pad_x)
+                    crop = doc_img[y1:y2, x1:x2]
+                    crop = trim_text_bleed(crop)
+                    if looks_like_a_face_region(crop):
+                        logs.append({"type": "INFO", "text": f"Face Extractor: Detected face via Haar Cascade ({x2-x1}×{y2-y1}px)"})
+                        return crop
+    except Exception as e:
+        logs.append({"type": "WARN", "text": f"Haar cascade detection note: {str(e)[:50]}"})
+
+    # 3. Positional Heuristic Candidates (standard identity card layout zones)
+    candidates = [
+        (int(w * 0.02), int(h * 0.08), int(w * 0.48), int(h * 0.78)),  # Left photo (Passport, Aadhaar)
+        (int(w * 0.52), int(h * 0.08), int(w * 0.98), int(h * 0.78)),  # Right photo (PAN Card)
+        (int(w * 0.03), int(h * 0.05), int(w * 0.45), int(h * 0.60)),  # Top-left photo
+        (int(w * 0.02), int(h * 0.40), int(w * 0.50), int(h * 0.95)),  # Bottom-left photo
+        (int(w * 0.50), int(h * 0.40), int(w * 0.98), int(h * 0.95)),  # Bottom-right photo
+    ]
+
+    for x1, y1, x2, y2 in candidates:
+        if x2 > x1 + 40 and y2 > y1 + 40:
+            region = doc_img[y1:y2, x1:x2]
+            try:
+                r_gray = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
+                c1 = get_face_cascade()
+                if c1 is not None:
+                    sub_faces = c1.detectMultiScale(r_gray, scaleFactor=1.04, minNeighbors=2, minSize=(25, 25))
+                    if len(sub_faces) > 0:
+                        sfx, sfy, sfw, sfh = sorted(sub_faces, key=lambda f: f[2] * f[3], reverse=True)[0]
+                        px, py = int(sfw * 0.25), int(sfh * 0.30)
+                        sub_crop = region[max(0, sfy-py):min(region.shape[0], sfy+sfh+py), max(0, sfx-px):min(region.shape[1], sfx+sfw+px)]
+                        if looks_like_a_face_region(sub_crop):
+                            logs.append({"type": "INFO", "text": "Face Extractor: Located portrait in layout candidate"})
+                            return sub_crop
+            except Exception:
+                pass
+
+            if looks_like_a_face_region(region):
+                logs.append({"type": "INFO", "text": f"Face Extractor: Using candidate profile photo region ({x2-x1}×{y2-y1}px)"})
+                return region
+
+    logs.append({"type": "WARN", "text": "Face Extractor: No profile photo region located on document canvas"})
     return None
 
 
-def crop_face_b64_from_doc(doc_img: np.ndarray, logs: list = None) -> str | None:
-    """Extracts headshot and returns base64 PNG string for web rendering."""
+def crop_face_b64_from_doc(doc_img_or_bytes: Any, logs: list = None) -> str | None:
+    """Extracts headshot and returns base64 data URL string for web rendering."""
+    if doc_img_or_bytes is None:
+        return None
+    if isinstance(doc_img_or_bytes, (bytes, str)):
+        from app.preprocessing.multi_doc_detector import decode_image_bytes_to_bgr
+        doc_img = decode_image_bytes_to_bgr(doc_img_or_bytes)
+    else:
+        doc_img = doc_img_or_bytes
+    if doc_img is None or doc_img.size == 0:
+        return None
+
     crop = extract_headshot_from_document(doc_img, logs)
     if crop is not None and crop.size > 0:
         try:
             face_rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
             pil = Image.fromarray(face_rgb)
             buf = io.BytesIO()
-            pil.save(buf, format="PNG")
-            return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
+            pil.save(buf, format="JPEG", quality=92)
+            return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
         except Exception:
             pass
     return None

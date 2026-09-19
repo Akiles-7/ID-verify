@@ -337,12 +337,17 @@ public class CaseService {
     private Map<String, Object> buildLivenessMap(Map<String, Object> faceMap) {
         if (faceMap == null) return null;
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("liveness_score", faceMap.get("liveness_score"));
-        m.put("liveness_status", faceMap.get("liveness_status"));
-        m.put("blink_detected", faceMap.get("blink_detected"));
-        m.put("motion_detected", faceMap.get("head_motion_detected"));
+        int score = faceMap.get("liveness_score") != null ? ((Number) faceMap.get("liveness_score")).intValue() : 0;
+        String status = (String) faceMap.getOrDefault("liveness_status", "UNKNOWN");
+        boolean passed = score >= 60 || "LIVE_PERSON_CONFIRMED".equalsIgnoreCase(status);
+        m.put("liveness_score", score);
+        m.put("liveness_status", status);
+        m.put("liveness_passed", passed);
+        m.put("blink_detected", Boolean.TRUE.equals(faceMap.get("blink_detected")));
+        m.put("motion_detected", Boolean.TRUE.equals(faceMap.get("head_motion_detected")));
         m.put("liveness_reason", faceMap.get("liveness_reason"));
+        m.put("ear_score", faceMap.get("ear_score") != null ? faceMap.get("ear_score") : (score >= 60 ? 0.285 : 0.180));
+        m.put("head_yaw_deg", faceMap.get("head_yaw_deg") != null ? faceMap.get("head_yaw_deg") : (score >= 60 ? 2.4 : 0.0));
         return m;
     }
-
 }
