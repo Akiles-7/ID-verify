@@ -18,31 +18,16 @@ export default function TamperHeatmap({ data }) {
   }
 
   const tamper = data;
-  let exif = tamper.exif_flags || {};
-  if (typeof exif === 'string') {
-    try { exif = JSON.parse(exif); } catch { exif = {}; }
-  }
-  let hotspots = tamper.hotspots || [];
-  if (typeof hotspots === 'string') {
-    try { hotspots = JSON.parse(hotspots); } catch { hotspots = []; }
-  }
-
-  const elaScore = tamper.ela_score ?? 0;
-  const metadataScore = (tamper.metadata_score != null && tamper.metadata_score > 0)
-    ? tamper.metadata_score
-    : (exif.metadata_stripped ? 55 : (exif.exif_score || 0));
-  const regionScore = tamper.region_consistency_score ?? 0;
-
-  const rawConf = tamper.overall_tamper_confidence ?? tamper.overall_tamper_score;
-  const conf = rawConf != null && rawConf > 0 
-    ? rawConf 
-    : Math.max(Math.round(elaScore * 0.95), Math.round(metadataScore * 0.90));
-  const isSuspicious = conf >= 40 || elaScore >= 45 || metadataScore >= 45;
+  const conf = tamper.overall_tamper_confidence ?? 0;
+  const isSuspicious = conf >= 40;
 
   const statusBadge = isSuspicious
     ? `bg-red-50 text-red-600 border border-red-200`
     : `bg-emerald-50 text-emerald-600 border border-emerald-200`;
   const statusText = isSuspicious ? `SUSPICIOUS ${conf}%` : `CLEAN ${conf}%`;
+
+  const exif = tamper.exif_flags || {};
+  const hotspots = tamper.hotspots || [];
 
   return (
     <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm flex flex-col h-full">
@@ -120,18 +105,18 @@ export default function TamperHeatmap({ data }) {
             <div>
               <div className="flex justify-between text-xs font-semibold mb-1">
                 <span className="text-gray-900">Metadata / EXIF</span>
-                <span className={`font-bold ${metadataScore >= 40 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                  {metadataScore}%
+                <span className={`font-bold ${tamper.metadata_score > 40 ? 'text-red-600' : 'text-emerald-600'}`}>
+                  {tamper.metadata_score}%
                 </span>
               </div>
               <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
                 <div
-                  className={`h-full rounded-full ${metadataScore >= 40 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                  style={{ width: `${metadataScore}%` }}
+                  className={`h-full rounded-full ${tamper.metadata_score > 40 ? 'bg-red-500' : 'bg-emerald-500'}`}
+                  style={{ width: `${tamper.metadata_score}%` }}
                 />
               </div>
               <p className="text-[11px] text-gray-400 mt-0.5">
-                {exif.software ? `Edited with: ${exif.software}` : exif.metadata_stripped ? 'EXIF metadata stripped (suspicious)' : 'EXIF metadata present'}
+                {exif.software ? `Edited with: ${exif.software}` : exif.metadata_stripped ? 'EXIF metadata stripped' : 'EXIF metadata present'}
               </p>
             </div>
 
@@ -170,12 +155,6 @@ export default function TamperHeatmap({ data }) {
             </span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-400">EXIF Risk Score:</span>
-            <span className={metadataScore >= 40 ? 'text-amber-600 font-bold' : 'text-emerald-600 font-bold'}>
-              {metadataScore}% {metadataScore >= 40 ? '(Suspicious)' : '(Clean)'}
-            </span>
-          </div>
-          <div className="flex justify-between">
             <span className="text-gray-400">Suspicious Software:</span>
             <span className={exif.software && ['photoshop','gimp','pixelmator','affinity'].some(s => (exif.software || '').includes(s)) ? 'text-red-600 font-bold' : 'text-emerald-600'}>
               {exif.software && ['photoshop','gimp','pixelmator','affinity','paint.net'].some(s => (exif.software || '').toLowerCase().includes(s))
@@ -183,7 +162,7 @@ export default function TamperHeatmap({ data }) {
                 : 'No editing software detected'}
             </span>
           </div>
-          {Object.keys(exif).filter(k => !['software', 'metadata_stripped', 'exif_score'].includes(k)).map(k => (
+          {Object.keys(exif).filter(k => !['software', 'metadata_stripped'].includes(k)).map(k => (
             <div key={k} className="flex justify-between">
               <span className="text-gray-400">{k}:</span>
               <span>{String(exif[k])}</span>

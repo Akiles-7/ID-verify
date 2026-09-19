@@ -35,13 +35,9 @@ CREATE TABLE IF NOT EXISTS ocr_fields (
     surname VARCHAR(255),
     given_names VARCHAR(255),
     document_number VARCHAR(100),
-    document_type VARCHAR(20),
-    country_code VARCHAR(20),
     nationality VARCHAR(100),
     date_of_birth DATE,
     sex VARCHAR(20),
-    place_of_birth VARCHAR(255),
-    date_of_issue DATE,
     expiry_date DATE,
     issuing_country VARCHAR(100),
     personal_number VARCHAR(100),
@@ -97,8 +93,6 @@ CREATE TABLE IF NOT EXISTS face_results (
     comparison_performed BOOLEAN DEFAULT FALSE,
     match_status VARCHAR(40),
     embedding_preview LONGTEXT,
-    doc_face_b64 LONGTEXT,
-    live_face_b64 LONGTEXT,
     FOREIGN KEY (case_id) REFERENCES cases(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

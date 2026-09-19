@@ -86,8 +86,7 @@ def deskew_image(image: np.ndarray) -> Tuple[np.ndarray, float]:
             return image, 0.0
 
         median_angle = float(np.median(angles))
-        # Only correct subtle camera skew between 0.5 and 12 degrees
-        if abs(median_angle) < 0.5 or abs(median_angle) > 12.0:
+        if abs(median_angle) < 0.5:
             return image, 0.0
             
         (h, w) = image.shape[:2]
@@ -127,8 +126,8 @@ def detect_and_warp_document(image: np.ndarray) -> Tuple[np.ndarray, bool]:
         for c in contours:
             peri = cv2.arcLength(c, True)
             approx = cv2.approxPolyDP(c, 0.02 * peri, True)
-            # Check if 4 points and covers at least 35% of image area but not almost the whole image (> 95%)
-            if len(approx) == 4 and (0.35 * h * w) < cv2.contourArea(approx) < (0.95 * h * w):
+            # Check if 4 points and covers at least 20% of image area
+            if len(approx) == 4 and cv2.contourArea(approx) > (0.20 * h * w):
                 doc_contour = approx
                 break
                 
@@ -158,9 +157,6 @@ def detect_and_warp_document(image: np.ndarray) -> Tuple[np.ndarray, bool]:
         heightB = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
         maxHeight = max(int(heightA), int(heightB))
         
-        if maxWidth < 100 or maxHeight < 100:
-            return image, False
-            
         dst = np.array([
             [0, 0],
             [maxWidth - 1, 0],
@@ -197,8 +193,6 @@ def normalize_resolution(image: np.ndarray, max_dim: int = 2400, min_dim: int = 
 def build_preprocessing_variants(image: np.ndarray, quality: Dict[str, Any]) -> Dict[str, np.ndarray]:
     """
     Generates tailored preprocessing variants optimized for different document areas & OCR engines:
-    - variant_raw: Pristine original image (best for natural text in modern OCR models)
-    - variant_upscaled: Bicubic upscaled image if image is small/low-res
     - variant_a: Color enhanced (LAB CLAHE)
     - variant_b: Grayscale + CLAHE contrast
     - variant_c: Denoised + Adaptive Thresholding (Sauvola/Gaussian)
@@ -206,16 +200,6 @@ def build_preprocessing_variants(image: np.ndarray, quality: Dict[str, Any]) -> 
     """
     variants = {}
     try:
-        # Variant Raw: Always provide the pristine image directly
-        variants["variant_raw"] = image
-        
-        h, w = image.shape[:2]
-        # If low resolution or compressed, upscale 2x-2.5x with bicubic interpolation
-        if min(h, w) < 700 or max(h, w) < 1100:
-            scale_factor = max(1.5, min(3.0, 1200.0 / max(h, w)))
-            upscaled = cv2.resize(image, (0, 0), fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_CUBIC)
-            variants["variant_upscaled"] = upscaled
-
         # Step 1: Document boundary detection & perspective warp
         warped, boundary_found = detect_and_warp_document(image)
         norm_img = normalize_resolution(warped)
@@ -259,7 +243,6 @@ def build_preprocessing_variants(image: np.ndarray, quality: Dict[str, Any]) -> 
         # Fallback variants
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
         return {
-            "variant_raw": image,
             "variant_a": image,
             "variant_b": gray,
             "variant_c": gray,

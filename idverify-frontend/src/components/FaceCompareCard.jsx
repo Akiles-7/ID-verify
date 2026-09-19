@@ -17,17 +17,12 @@ export default function FaceCompareCard({ data, docImageUrl, liveImageUrl }) {
 
   const face = data;
   const comparisonDone = face.comparison_performed === true && face.distance !== null && face.distance !== undefined;
-  const isMatch = comparisonDone ? (face.match ?? face.matched ?? (face.status === 'VERIFIED')) : null;
-  const simPct = comparisonDone
-    ? (face.similarity_score !== undefined && face.similarity_score !== null
-        ? Math.round(face.similarity_score)
-        : Math.max(0, Math.min(100, Math.round((1 - face.distance) * 100))))
+  const isMatch = comparisonDone ? (face.match ?? false) : null;
+  const simPct = comparisonDone && face.distance !== null
+    ? Math.max(0, Math.min(100, Math.round((1 - face.distance) * 100)))
     : null;
 
-  let embPreview = face.embedding_preview;
-  if (typeof embPreview === 'string') {
-    try { embPreview = JSON.parse(embPreview); } catch { embPreview = null; }
-  }
+  const embPreview = face.embedding_preview;
 
   // Status badge
   let statusBadge = { text: 'NOT PERFORMED', cls: 'bg-gray-100 text-gray-500 border-gray-200' };
@@ -65,7 +60,7 @@ export default function FaceCompareCard({ data, docImageUrl, liveImageUrl }) {
               <img
                 src={docImageUrl}
                 alt="Document Photo"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover grayscale"
               />
             ) : (
               <div className="flex flex-col items-center text-gray-300">

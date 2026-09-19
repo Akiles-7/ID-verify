@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import OcrFieldsPanel from './OcrFieldsPanel';
-import DocumentBoundingBoxViewer from './DocumentBoundingBoxViewer';
 import ValidationChecklist from './ValidationChecklist';
 import TamperHeatmap from './TamperHeatmap';
 import FaceCompareCard from './FaceCompareCard';
@@ -11,8 +10,6 @@ import { ArrowRight, CheckCircle2, RefreshCw } from 'lucide-react';
 export default function StepByStepScan({ scanData, caseId, docPreviewUrl, livePreviewUrl, onActionComplete }) {
   const [currentStep, setCurrentStep] = useState(1);
   const [showFullPage, setShowFullPage] = useState(false);
-  const [highlightedField, setHighlightedField] = useState(null);
-
 
   const steps = [
     { num: 1, title: 'Module 1: OCR Extraction', desc: 'Identity fields & ICAO 9303 MRZ parsing' },
@@ -67,20 +64,14 @@ export default function StepByStepScan({ scanData, caseId, docPreviewUrl, livePr
         <ProcessingConsole logs={logs} />
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <DocumentBoundingBoxViewer
-            imageUrl={docPreviewUrl || scanData?.documentImagePath}
-            blocks={scanData?.ocr?.raw_blocks || []}
-            highlightField={highlightedField}
-            qualityMetrics={scanData?.ocr?.quality_metrics}
-          />
-          <OcrFieldsPanel data={scanData?.ocr} onHoverField={setHighlightedField} />
+          <OcrFieldsPanel data={scanData?.ocr} />
           <ValidationChecklist data={scanData?.validation} />
           <TamperHeatmap data={scanData?.tampering || scanData?.tamper} />
           <FaceCompareCard
             data={scanData?.face}
             livenessData={scanData?.liveness}
-            docImageUrl={scanData?.face?.doc_face_b64 || scanData?.ocr?.doc_face_b64 || scanData?.ocr?.face_crop_b64 || docPreviewUrl}
-            liveImageUrl={scanData?.face?.live_face_b64 || livePreviewUrl}
+            docImageUrl={scanData?.ocr?.doc_face_b64 || docPreviewUrl}
+            liveImageUrl={livePreviewUrl}
           />
         </div>
 
@@ -133,25 +124,15 @@ export default function StepByStepScan({ scanData, caseId, docPreviewUrl, livePr
 
       {/* Step Content */}
       <div className="min-h-[420px]">
-        {currentStep === 1 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <DocumentBoundingBoxViewer
-              imageUrl={docPreviewUrl || scanData?.documentImagePath}
-              blocks={scanData?.ocr?.raw_blocks || []}
-              highlightField={highlightedField}
-              qualityMetrics={scanData?.ocr?.quality_metrics}
-            />
-            <OcrFieldsPanel data={scanData?.ocr} onHoverField={setHighlightedField} />
-          </div>
-        )}
+        {currentStep === 1 && <OcrFieldsPanel data={scanData?.ocr} />}
         {currentStep === 2 && <ValidationChecklist data={scanData?.validation} />}
         {currentStep === 3 && <TamperHeatmap data={scanData?.tampering || scanData?.tamper} />}
         {currentStep === 4 && (
           <FaceCompareCard
             data={scanData?.face}
             livenessData={scanData?.liveness}
-            docImageUrl={scanData?.face?.doc_face_b64 || scanData?.ocr?.doc_face_b64 || scanData?.ocr?.face_crop_b64 || docPreviewUrl}
-            liveImageUrl={scanData?.face?.live_face_b64 || livePreviewUrl}
+            docImageUrl={scanData?.ocr?.doc_face_b64 || docPreviewUrl}
+            liveImageUrl={livePreviewUrl}
           />
         )}
         {currentStep === 5 && (

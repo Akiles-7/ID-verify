@@ -77,13 +77,9 @@ public class CaseService {
             m.put("surname", ocr.getSurname());
             m.put("given_names", ocr.getGivenNames());
             m.put("document_number", ocr.getDocumentNumber());
-            m.put("document_type", ocr.getDocumentType());
-            m.put("country_code", ocr.getCountryCode());
             m.put("nationality", ocr.getNationality());
             m.put("date_of_birth", ocr.getDateOfBirth() != null ? ocr.getDateOfBirth().toString() : null);
             m.put("sex", ocr.getSex());
-            m.put("place_of_birth", ocr.getPlaceOfBirth());
-            m.put("date_of_issue", ocr.getDateOfIssue() != null ? ocr.getDateOfIssue().toString() : null);
             m.put("expiry_date", ocr.getExpiryDate() != null ? ocr.getExpiryDate().toString() : null);
             m.put("issuing_country", ocr.getIssuingCountry());
             m.put("personal_number", ocr.getPersonalNumber());
@@ -91,35 +87,6 @@ public class CaseService {
             m.put("mrz_line2", ocr.getMrzLine2());
             m.put("ocr_engine", ocr.getOcrEngine());
             m.put("processing_ms", ocr.getProcessingMs());
-            if (ocr.getRawJson() != null && !ocr.getRawJson().isBlank()) {
-                try {
-                    Map<String, Object> rawOcr = objectMapper.readValue(ocr.getRawJson(), new TypeReference<>() {});
-                    rawOcr.forEach((k, v) -> {
-                        if (v != null && !m.containsKey(k)) {
-                            m.put(k, v);
-                        }
-                    });
-                    if (rawOcr.containsKey("structured_fields")) {
-                        m.put("structured_fields", rawOcr.get("structured_fields"));
-                    }
-                    if (rawOcr.containsKey("classification")) {
-                        m.put("classification", rawOcr.get("classification"));
-                    }
-                    if (rawOcr.containsKey("cross_validation")) {
-                        m.put("cross_validation", rawOcr.get("cross_validation"));
-                    }
-                    if (rawOcr.containsKey("quality_metrics")) {
-                        m.put("quality_metrics", rawOcr.get("quality_metrics"));
-                    }
-                    if (rawOcr.containsKey("raw_blocks")) {
-                        m.put("raw_blocks", rawOcr.get("raw_blocks"));
-                    }
-                    if (rawOcr.containsKey("multiple_documents")) {
-                        m.put("multiple_documents", rawOcr.get("multiple_documents"));
-                    }
-                } catch (Exception ignored) {
-                }
-            }
             ocrMap = m;
         }
 
@@ -151,23 +118,8 @@ public class CaseService {
             m.put("overall_tamper_confidence", tamper.getOverallTamperConfidence());
             m.put("heatmap_image_url", tamper.getHeatmapImagePath());
             m.put("heatmap_b64", tamper.getHeatmapB64());
-
-            Object exifFlags = Map.of();
-            try {
-                if (tamper.getExifFlags() != null && !tamper.getExifFlags().isBlank()) {
-                    exifFlags = objectMapper.readValue(tamper.getExifFlags(), new TypeReference<Map<String, Object>>() {});
-                }
-            } catch (Exception ignored) {}
-
-            Object hotspots = List.of();
-            try {
-                if (tamper.getHotspots() != null && !tamper.getHotspots().isBlank()) {
-                    hotspots = objectMapper.readValue(tamper.getHotspots(), new TypeReference<List<Object>>() {});
-                }
-            } catch (Exception ignored) {}
-
-            m.put("exif_flags", exifFlags);
-            m.put("hotspots", hotspots);
+            m.put("exif_flags", tamper.getExifFlags());
+            m.put("hotspots", tamper.getHotspots());
             tamperMap = m;
         }
 
@@ -178,7 +130,6 @@ public class CaseService {
             m.put("distance", face.getDistance());
             m.put("threshold", face.getThresholdUsed());
             m.put("match", face.getMatchResult());
-            m.put("matched", face.getMatchResult());
             m.put("model", face.getModel());
             m.put("embedding_dim", face.getEmbeddingDim());
             m.put("doc_confidence", face.getDocFaceConfidence());
@@ -190,23 +141,6 @@ public class CaseService {
             m.put("liveness_reason", face.getLivenessReason());
             m.put("comparison_performed", face.getComparisonPerformed() != null && face.getComparisonPerformed());
             m.put("status", face.getMatchStatus());
-            m.put("doc_face_b64", face.getDocFaceB64());
-            m.put("live_face_b64", face.getLiveFaceB64());
-
-            Object embPreview = List.of();
-            try {
-                if (face.getEmbeddingPreview() != null && !face.getEmbeddingPreview().isBlank()) {
-                    embPreview = objectMapper.readValue(face.getEmbeddingPreview(), new TypeReference<List<Double>>() {});
-                }
-            } catch (Exception ignored) {}
-            m.put("embedding_preview", embPreview);
-
-            if (face.getDistance() != null && face.getThresholdUsed() != null) {
-                double d = face.getDistance().doubleValue();
-                double th = face.getThresholdUsed().doubleValue();
-                double sim = d <= th ? 70.0 + (1.0 - (d / th)) * 28.0 : Math.max(0.0, 70.0 - ((d - th) / Math.max(0.01, 1.0 - th)) * 65.0);
-                m.put("similarity_score", Math.round(sim * 10.0) / 10.0);
-            }
             faceMap = m;
         }
 

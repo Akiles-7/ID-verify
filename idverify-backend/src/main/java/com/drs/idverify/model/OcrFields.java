@@ -30,12 +30,6 @@ public class OcrFields {
     @Column(name = "document_number", length = 100)
     private String documentNumber;
 
-    @Column(name = "document_type", length = 20)
-    private String documentType;
-
-    @Column(name = "country_code", length = 20)
-    private String countryCode;
-
     @Column(length = 100)
     private String nationality;
 
@@ -44,12 +38,6 @@ public class OcrFields {
 
     @Column(length = 20)
     private String sex;
-
-    @Column(name = "place_of_birth", length = 255)
-    private String placeOfBirth;
-
-    @Column(name = "date_of_issue")
-    private LocalDate dateOfIssue;
 
     @Column(name = "expiry_date")
     private LocalDate expiryDate;

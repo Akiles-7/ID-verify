@@ -60,14 +60,8 @@ public class FaceResult {
     private Boolean comparisonPerformed;
 
     @Column(name = "match_status", length = 40)
-    private String matchStatus;
+    private String matchStatus; // SUCCESS, NO_DOCUMENT_PHOTO, NO_LIVE_PHOTO, MATCH_ERROR, etc.
 
     @Column(name = "embedding_preview", columnDefinition = "LONGTEXT")
     private String embeddingPreview; // 16-element JSON array for UI bar chart
-
-    @Column(name = "doc_face_b64", columnDefinition = "LONGTEXT")
-    private String docFaceB64;
-
-    @Column(name = "live_face_b64", columnDefinition = "LONGTEXT")
-    private String liveFaceB64;
 }

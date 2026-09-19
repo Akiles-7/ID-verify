@@ -50,8 +50,8 @@ public class ScanOrchestrationService {
         this.settingsService = settingsService;
         this.auditLogService = auditLogService;
         org.springframework.http.client.SimpleClientHttpRequestFactory factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(30000);
-        factory.setReadTimeout(180000);
+        factory.setConnectTimeout(60000);
+        factory.setReadTimeout(60000);
         this.restTemplate = new RestTemplate(factory);
     }
 
@@ -122,8 +122,8 @@ public class ScanOrchestrationService {
                     body.add("livePhoto", liveResource);
                 }
                 body.add("faceModel", settings.getFaceBackendModel() != null ? settings.getFaceBackendModel() : "ARCFACE");
-                body.add("faceThreshold", settings.getFaceMatchThreshold() != null ? settings.getFaceMatchThreshold() : 0.68);
-                body.add("elaQuality", settings.getElaJpegQuality() != null ? settings.getElaJpegQuality() : 85);
+                body.add("faceThreshold", settings.getFaceMatchThreshold() != null ? settings.getFaceMatchThreshold() : 0.40);
+                body.add("elaQuality", settings.getElaJpegQuality() != null ? settings.getElaJpegQuality() : 70);
                 body.add("enableCanny", settings.getEnableCannyEdge() != null ? settings.getEnableCannyEdge() : true);
                 body.add("enableExif", settings.getEnableExifScan() != null ? settings.getEnableExifScan() : true);
                 body.add("w1", settings.getWeightMrz() != null ? settings.getWeightMrz() : 0.30);
@@ -147,8 +147,7 @@ public class ScanOrchestrationService {
                     aiSuccess = true;
                 }
             } catch (Exception e) {
-                org.slf4j.LoggerFactory.getLogger(ScanOrchestrationService.class)
-                        .error("AI service call failed: {}", e.getMessage(), e);
+                // AI service offline or error – fallback
             }
         }
 
@@ -189,23 +188,9 @@ public class ScanOrchestrationService {
 
         String surname = fieldString(ocrFields, "surname", "UNKNOWN");
         String givenNames = fieldString(ocrFields, "given_names", "");
-        String fullName = firstField(ocrFields, "full_name", "name");
-        if ((surname.equalsIgnoreCase("UNKNOWN") || surname.isBlank()) && !fullName.isBlank()) {
-            if (fullName.contains(" ")) {
-                int lastSpace = fullName.lastIndexOf(' ');
-                surname = fullName.substring(lastSpace + 1).trim();
-                givenNames = fullName.substring(0, lastSpace).trim();
-            } else {
-                surname = fullName.trim();
-            }
-        }
         String documentNumber = fieldString(ocrFields, "document_number", "");
-        String documentType = fieldString(ocrFields, "document_type", "PASSPORT");
-        String countryCode = fieldString(ocrFields, "country_code", "");
         String nationality = fieldString(ocrFields, "nationality", "");
         String dobRaw = firstField(ocrFields, "date_of_birth", "dob");
-        String placeOfBirth = fieldString(ocrFields, "place_of_birth", "");
-        String issueRaw = fieldString(ocrFields, "date_of_issue", "");
         String expiryRaw = fieldString(ocrFields, "expiry_date", "");
         String issuingCountry = fieldString(ocrFields, "issuing_country", "");
         String personalNumber = fieldString(ocrFields, "personal_number", "");
@@ -221,10 +206,7 @@ public class ScanOrchestrationService {
         newCase.setRiskBand(band.toUpperCase());
         caseRepository.save(newCase);
 
-        Map<String, Object> cleanOcr = new LinkedHashMap<>(ocrEnvelope);
-        if (ocrFields != null) {
-            cleanOcr.put("fields", ocrFields);
-        }
+        Map<String, Object> cleanOcr = new LinkedHashMap<>(ocrFields);
         cleanOcr.remove("face_crop_b64");
         cleanOcr.remove("doc_face_b64");
         String rawJsonStr;
@@ -239,13 +221,9 @@ public class ScanOrchestrationService {
                 .surname(safeSubstring(emptyToNull(surname), 255))
                 .givenNames(safeSubstring(emptyToNull(givenNames), 255))
                 .documentNumber(safeSubstring(emptyToNull(documentNumber), 100))
-                .documentType(safeSubstring(emptyToNull(documentType), 20))
-                .countryCode(safeSubstring(emptyToNull(countryCode), 20))
                 .nationality(safeSubstring(emptyToNull(nationality), 100))
                 .dateOfBirth(parseOcrDate(dobRaw))
                 .sex(normalizeSexNullable(sex))
-                .placeOfBirth(safeSubstring(emptyToNull(placeOfBirth), 255))
-                .dateOfIssue(parseOcrDate(issueRaw))
                 .expiryDate(parseOcrDate(expiryRaw))
                 .issuingCountry(safeSubstring(emptyToNull(issuingCountry), 100))
                 .personalNumber(safeSubstring(emptyToNull(personalNumber), 100))
@@ -279,21 +257,6 @@ public class ScanOrchestrationService {
         Map<String, Object> ela = asMap(signals.get("ela"));
         Map<String, Object> exif = asMap(signals.get("exif"));
         Map<String, Object> dct = asMap(signals.get("dct_frequency"));
-
-        String exifFlagsJson = "{}";
-        String hotspotsJson = "[]";
-        try {
-            ObjectMapper om = new ObjectMapper();
-            Object exifObj = tamperData.getOrDefault("exif_flags", exif);
-            if (exifObj != null) {
-                exifFlagsJson = om.writeValueAsString(exifObj);
-            }
-            Object hotspotsObj = tamperData.getOrDefault("hotspots", signals.getOrDefault("hotspots", List.of()));
-            if (hotspotsObj != null) {
-                hotspotsJson = om.writeValueAsString(hotspotsObj);
-            }
-        } catch (Exception ignored) {}
-
         TamperResult tamper = TamperResult.builder()
                 .caseEntity(newCase)
                 .elaScore(parseInt(firstPresent(tamperData, "ela_score"), parseInt(ela.get("ela_score"), 0)))
@@ -302,8 +265,8 @@ public class ScanOrchestrationService {
                 .overallTamperConfidence(parseInt(firstPresent(tamperData, "overall_tamper_confidence", "overall_tamper_score"), 0))
                 .heatmapImagePath(safeSubstring(stringValue(tamperData.get("heatmap_image_url"), "/media/heatmap.png"), 255))
                 .heatmapB64((String) tamperData.get("heatmap_b64"))
-                .exifFlags(exifFlagsJson)
-                .hotspots(hotspotsJson)
+                .exifFlags(exif.isEmpty() ? "{}" : exif.toString())
+                .hotspots(signals.isEmpty() ? "[]" : signals.toString())
                 .build();
         tamperResultRepository.save(tamper);
 
@@ -321,20 +284,12 @@ public class ScanOrchestrationService {
                 ? (Boolean) faceData.get("matched")
                 : (Boolean) faceData.get("match");
 
-        String embPreviewJson = "[0.000]";
-        try {
-            Object embObj = faceData.get("embedding_preview");
-            if (embObj != null) {
-                embPreviewJson = new ObjectMapper().writeValueAsString(embObj);
-            }
-        } catch (Exception ignored) {}
-
         FaceResult face = FaceResult.builder()
                 .caseEntity(newCase)
                 .distance(faceData.get("distance") != null
                         ? parseBigDecimal(faceData.get("distance"), "0.0000").setScale(4, RoundingMode.HALF_UP)
                         : null)
-                .thresholdUsed(parseBigDecimal(faceData.get("threshold"), "0.6800").setScale(4, RoundingMode.HALF_UP))
+                .thresholdUsed(parseBigDecimal(faceData.get("threshold"), "0.4000").setScale(4, RoundingMode.HALF_UP))
                 .matchResult(isMatched)
                 .model(safeSubstring((String) faceData.getOrDefault("model", "ArcFace"), 40))
                 .embeddingDim(parseInt(faceData.get("embedding_dim"), 512))
@@ -349,9 +304,7 @@ public class ScanOrchestrationService {
                 .livenessReason(safeSubstring((String) livenessData.getOrDefault("detail", livenessData.getOrDefault("reason", "")), 255))
                 .comparisonPerformed(comparisonPerformed)
                 .matchStatus(matchStatus)
-                .embeddingPreview(embPreviewJson)
-                .docFaceB64((String) faceData.get("doc_face_b64"))
-                .liveFaceB64((String) faceData.get("live_face_b64"))
+                .embeddingPreview("[0.000]")
                 .build();
         faceResultRepository.save(face);
 
@@ -384,8 +337,7 @@ public class ScanOrchestrationService {
 
     private String buildSubjectName(String surname, String givenNames) {
         if (givenNames == null || givenNames.isBlank()) return surname;
-        if (surname == null || surname.isBlank() || surname.equalsIgnoreCase("UNKNOWN")) return givenNames;
-        return surname + ", " + givenNames;
+        return surname + ", " + givenNames.split(" ")[0];
     }
 
     private LocalDate parseOcrDate(String raw) {
@@ -393,13 +345,6 @@ public class ScanOrchestrationService {
         String s = raw.trim();
         try {
             if (s.matches("\\d{4}-\\d{2}-\\d{2}")) return LocalDate.parse(s);
-            if (s.matches("\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{4}")) {
-                String[] parts = s.split("[/.-]");
-                int dd = Integer.parseInt(parts[0]);
-                int mm = Integer.parseInt(parts[1]);
-                int yyyy = Integer.parseInt(parts[2]);
-                return LocalDate.of(yyyy, mm, dd);
-            }
             if (s.matches("\\d{6}")) {
                 int yy = Integer.parseInt(s.substring(0, 2));
                 int mm = Integer.parseInt(s.substring(2, 4));
@@ -417,7 +362,7 @@ public class ScanOrchestrationService {
         String trimmed = s.trim();
         if (trimmed.equalsIgnoreCase("Male")) return "M";
         if (trimmed.equalsIgnoreCase("Female")) return "F";
-        return trimmed.equalsIgnoreCase("M") || trimmed.equalsIgnoreCase("F") ? trimmed.toUpperCase() : null;
+        return safeSubstring(trimmed, 20);
     }
 
     private Map<String, Object> asMap(Object value) {

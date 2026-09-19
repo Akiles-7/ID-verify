@@ -25,37 +25,15 @@ export default function RiskAssessmentPanel({ data, caseId, onActionComplete, fu
   }
 
   // Calculate live score based on active weight sliders
-  const contribMrz = risk.contributions?.mrz ?? (fullScanData?.ocr?.mrz_result?.valid === false ? 30 : 0);
-
-  // Dynamic tamper contribution reflecting ELA & EXIF forensic analysis
-  const tamperConfidence = fullScanData?.tampering?.overall_tamper_confidence 
-    ?? fullScanData?.tampering?.overall_tamper_score 
-    ?? fullScanData?.tampering?.ela_score 
-    ?? fullScanData?.tamper?.overallTamperConfidence 
-    ?? fullScanData?.tamper?.elaScore;
-  const dynamicTamper = tamperConfidence != null ? Math.round((tamperConfidence / 100.0) * 35) : null;
-  const contribTamper = (risk.contributions?.tamper && risk.contributions?.tamper > 15)
-    ? risk.contributions.tamper
-    : (dynamicTamper ?? risk.contributions?.tamper ?? 20);
-  const contribFace = risk.contributions?.face ?? 0;
-  const contribVal = risk.contributions?.validation ?? 0;
+  const contribMrz = risk.contributions?.mrz ?? 30;
+  const contribTamper = risk.contributions?.tamper ?? 27;
+  const contribFace = risk.contributions?.face ?? 15;
+  const contribVal = risk.contributions?.validation ?? 2;
 
   const rawScore = w1 * (contribMrz / 0.30) + w2 * (contribTamper / 0.35) + w3 * (contribFace / 0.25) + w4 * (contribVal / 0.10);
   const totalScore = Math.min(100, Math.max(0, Math.round(rawScore)));
   const band = totalScore >= 60 ? 'HIGH' : (totalScore >= 30 ? 'MEDIUM' : 'LOW');
-
-  const activeFlags = Array.isArray(risk.active_flags) && risk.active_flags.length > 0 
-    ? [...risk.active_flags] 
-    : (Array.isArray(risk.risk_reasons) ? [...risk.risk_reasons] : []);
-
-  const elaScore = fullScanData?.tampering?.ela_score ?? fullScanData?.tamper?.elaScore;
-  if (elaScore >= 45 && !activeFlags.some(f => f.includes('ELA') || f.includes('Error Level') || f.includes('compression'))) {
-    activeFlags.push(`Error Level Analysis (ELA) detected compression delta (${elaScore}%)`);
-  }
-  const exifFlags = fullScanData?.tampering?.exif_flags || fullScanData?.tampering?.signals?.exif || {};
-  if ((exifFlags.metadata_stripped || (exifFlags.exif_score && exifFlags.exif_score >= 40)) && !activeFlags.some(f => f.includes('EXIF'))) {
-    activeFlags.push(`EXIF metadata is suspicious or stripped (${exifFlags.exif_score || 55}%)`);
-  }
+  const activeFlags = Array.isArray(risk.active_flags) ? risk.active_flags : [];
 
   const pctMrz = Math.min(100, Math.round((contribMrz / Math.max(1, w1 * 100)) * 100));
   const pctTamper = Math.min(100, Math.round((contribTamper / Math.max(1, w2 * 100)) * 100));

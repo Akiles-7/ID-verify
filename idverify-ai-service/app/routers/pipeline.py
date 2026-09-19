@@ -10,7 +10,7 @@ from app.modules.liveness import evaluate_real_liveness
 router = APIRouter()
 
 MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024  # 15 MB cap
-ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "image/bmp", "application/pdf"}
+ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "image/bmp"}
 
 def validate_uploaded_file(file: UploadFile, label: str):
     """Validates file size and MIME type / magic bytes before processing."""
@@ -21,15 +21,14 @@ def validate_uploaded_file(file: UploadFile, label: str):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"{label} file size exceeds maximum permitted limit (15 MB)"
             )
-        # Check MIME type & extension
-        fname = file.filename.lower()
-        ctype = (file.content_type or "").lower()
-        if ctype not in ALLOWED_MIME_TYPES and not ctype.startswith("image/") and not fname.endswith((".pdf", ".jpg", ".jpeg", ".png", ".webp", ".bmp")):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"{label} invalid file format ({ctype}). Please upload a valid JPEG, PNG, WebP, or PDF document."
-            )
-
+        # Check MIME type
+        if file.content_type and file.content_type.lower() not in ALLOWED_MIME_TYPES:
+            # Allow common image types
+            if not file.content_type.startswith("image/"):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"{label} invalid file format ({file.content_type}). Please upload a valid JPEG, PNG, or WebP image."
+                )
 
 @router.post("/pipeline")
 @router.post("/pipeline/run")
@@ -39,8 +38,8 @@ async def pipeline_run(
     document: UploadFile = File(None),
     livePhoto: UploadFile = File(None),
     faceModel: str = Form("ARCFACE"),
-    faceThreshold: float = Form(0.68),
-    elaQuality: int = Form(85),
+    faceThreshold: float = Form(0.40),
+    elaQuality: int = Form(90),
     enableCanny: bool = Form(True),
     enableExif: bool = Form(True)
 ):
@@ -111,61 +110,8 @@ async def pipeline_run(
         "ocr": ocr_res,
         "validation": val_res,
         "tamper": tamper_res,
-        "tampering": tamper_res,
         "face": face_res,
         "liveness": liveness_res,
         "risk": risk_res,
         "logs": logs
     }
-
-@router.post("/extract")
-@router.post("/document/extract")
-async def extract_document_api(
-    documentType: str = Form("AUTO_DETECT"),
-    file: UploadFile = File(None),
-    document: UploadFile = File(None)
-):
-    """
-    Dedicated AI Document & Identity Data Extraction API adhering to Section 17.
-    Accepts JPG, PNG, WEBP, PDF.
-    Returns: document_type, fields, mrz, cross_validation, quality_metrics, raw_ocr, warnings.
-    """
-    doc_file = file or document
-    validate_uploaded_file(doc_file, "Document")
-    contents = await doc_file.read() if doc_file else b""
-    if not contents:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Document file is required for extraction"
-        )
-    logs = []
-    res = extract_ocr_fields(contents, documentType, logs)
-    
-    classification = res.get("classification", {})
-    mrz_res = res.get("mrz_result", {})
-    raw_mrz = mrz_res.get("raw_mrz", [])
-    
-    return {
-        "success": res.get("success", False),
-        "document_type": {
-            "value": res.get("document_type", "Unknown document"),
-            "confidence": classification.get("confidence", 0.0),
-            "is_confident": classification.get("is_confident", False)
-        },
-        "fields": res.get("structured_fields", {}),
-        "mrz": {
-            "line1": raw_mrz[0] if len(raw_mrz) > 0 else None,
-            "line2": raw_mrz[1] if len(raw_mrz) > 1 else None,
-            "line3": raw_mrz[2] if len(raw_mrz) > 2 else None,
-            "valid": mrz_res.get("valid", False),
-            "checksum_details": mrz_res.get("checksum_details", {})
-        },
-        "cross_validation": res.get("cross_validation", {}),
-        "quality_metrics": res.get("quality_metrics", {}),
-        "multiple_documents": res.get("multiple_documents", []),
-        "raw_ocr": res.get("raw_text", ""),
-        "raw_blocks": res.get("raw_blocks", []),
-        "warnings": res.get("warnings", []),
-        "ocr_engine": res.get("ocr_engine", "NONE")
-    }
-

@@ -3,7 +3,6 @@ import cv2
 import numpy as np
 import time
 from typing import Dict, Any, List, Tuple
-from app.preprocessing.multi_doc_detector import decode_image_bytes_to_bgr
 
 _mediapipe_available = False
 _mp_face_mesh = None
@@ -36,7 +35,8 @@ def evaluate_real_liveness(img_bytes: bytes, logs: List = None) -> Dict[str, Any
         logs = []
         
     t0 = time.time()
-    img = decode_image_bytes_to_bgr(img_bytes)
+    nparr = np.frombuffer(img_bytes, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if img is None:
         return {
             "liveness_passed": False,
@@ -59,7 +59,7 @@ def evaluate_real_liveness(img_bytes: bytes, logs: List = None) -> Dict[str, Any
     texture_var = float(np.var(lbp_map))
     
     is_spoof_texture = False
-    if texture_var > 1500.0 or (lap_var < 5.0 and texture_var < 15.0):
+    if lap_var < 35.0 or texture_var < 80.0:
         is_spoof_texture = True
         logs.append({"type": "WARN", "text": f"Liveness: Texture anomaly detected (Laplacian={lap_var:.1f}, TextureVar={texture_var:.1f})"})
 
@@ -109,12 +109,6 @@ def evaluate_real_liveness(img_bytes: bytes, logs: List = None) -> Dict[str, Any
             if len(faces) > 0:
                 face_detected = True
 
-    # Fallback face check if MediaPipe and Cascade both missed but face region variance is present
-    if not face_detected:
-        from app.modules.face_utils import looks_like_a_face_region
-        if looks_like_a_face_region(img):
-            face_detected = True
-
     proc_ms = int((time.time() - t0) * 1000)
     
     if not face_detected:
@@ -143,18 +137,17 @@ def evaluate_real_liveness(img_bytes: bytes, logs: List = None) -> Dict[str, Any
             "detail": "High-frequency screen/print artifact detected"
         }
         
-    # Valid live face capture verified via passive telemetry
-    logs.append({"type": "INFO", "text": f"Passive Liveness: Verified human portrait (EAR={ear_val:.2f}, Yaw={head_yaw:.1f}°)"})
+    # Single frame upload cannot prove temporal liveness without multi-frame sequence
     return {
-        "liveness_passed": True,
-        "liveness_status": "PASSED_PASSIVE",
-        "liveness_score": 90,
+        "liveness_passed": False,
+        "liveness_status": "STATIC_PHOTO_UNVERIFIED",
+        "liveness_score": 45,
         "blink_detected": False,
         "motion_detected": False,
         "ear_score": round(ear_val, 3),
         "head_yaw_deg": head_yaw,
         "processing_time_ms": proc_ms,
-        "detail": "Passive biometric liveness verified (natural facial geometry, open eyes, and skin texture)"
+        "detail": "Single static photo uploaded - multi-frame temporal video sequence required for LIVE classification"
     }
 
 def evaluate_multi_frame_liveness(frames_bytes: List[bytes], challenge_type: str = "ANY", logs: List = None) -> Dict[str, Any]:

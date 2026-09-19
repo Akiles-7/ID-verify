@@ -218,7 +218,7 @@ function AnalysisProgressModal({ progress }) {
 /* ──────────────────────── Main NewScan Component ──────────────────────── */
 
 export default function NewScan() {
-  const [selectedType, setSelectedType] = useState('AUTO_DETECT');
+  const [selectedType, setSelectedType] = useState('PASSPORT');
   const [documentFile, setDocumentFile] = useState(null);
   const [docPreview, setDocPreview] = useState(null);
   const [livePhotoBlob, setLivePhotoBlob] = useState(null);
@@ -411,14 +411,10 @@ export default function NewScan() {
   };
 
   const docTypes = [
-    { id: 'AUTO_DETECT', label: '✨ Auto-Detect' },
     { id: 'PASSPORT', label: 'Passport' },
-    { id: 'AADHAAR', label: 'Aadhaar Card' },
-    { id: 'PAN', label: 'PAN Card' },
-    { id: 'DRIVER_LICENSE', label: 'Driving Licence' },
-    { id: 'VOTER_ID', label: 'Voter ID' },
+    { id: 'DRIVER_LICENSE', label: 'Driver License' },
+    { id: 'VISA', label: 'Visa' },
     { id: 'NATIONAL_ID', label: 'National ID' },
-    { id: 'GENERAL', label: 'General Document' },
   ];
 
   return (
@@ -430,27 +426,6 @@ export default function NewScan() {
 
       {/* 6-Stage Pipeline Navigation Header */}
       <PipelineStepsHeader />
-
-      {/* Privacy Notice Banner */}
-      <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-slate-900 to-blue-950 text-slate-100 border border-slate-800 shadow-sm flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/30">
-            <FileText className="w-4 h-4" />
-          </div>
-          <div>
-            <div className="text-xs font-bold text-white flex items-center gap-2">
-              Identity Document Security & Privacy Notice
-              <span className="text-[10px] px-2 py-0.2 rounded-full font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                Ephemeral · Zero-Storage Safe
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
-              Uploaded document scans are processed in-memory for optical boundary detection, character extraction, and cryptographic checksum validation.
-              Identity numbers are masked in audit logs. You can permanently purge your document scan and extracted metadata at any time using the <strong>Delete Document</strong> button.
-            </p>
-          </div>
-        </div>
-      </div>
 
       {error && (
         <div className="mb-6 flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-semibold animate-in fade-in">
@@ -471,7 +446,7 @@ export default function NewScan() {
                   Document Capture
                 </h3>
                 <p className="text-[11px] text-gray-400 mt-0.5 font-mono">
-                  JPEG · PNG · WEBP · PDF · BMP · maximum 15 MB
+                  JPEG · PNG · PDF · BMP · TIFF · maximum 10 MB
                 </p>
               </div>
               <Activity className="w-4 h-4 text-amber-500" />
@@ -560,7 +535,7 @@ export default function NewScan() {
                     </div>
                     <div className="text-xs font-bold text-white mb-0.5">Upload File</div>
                     <div className="text-[10px] text-gray-400 font-mono mb-2">
-                      JPEG, PNG, WEBP, PDF, BMP (Max 15MB)
+                      JPEG, PNG, BMP (Max 10MB)
                     </div>
                     <span className="text-xs text-blue-400 font-semibold underline">
                       Browse Files
